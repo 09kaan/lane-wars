@@ -3,42 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Warlords: Legend</title>
+    <title>Warlords: Direct Touch</title>
     <link href="https://fonts.googleapis.com/css2?family=MedievalSharp&display=swap" rel="stylesheet">
     <style>
         :root { --wood: #5d4037; --gold: #ffd700; --grass: #388e3c; }
+        * { -webkit-tap-highlight-color: transparent; user-select: none; }
+        
         body {
-            background: #000; color: #fff; font-family: 'MedievalSharp', cursive;
+            background: #121212; color: #fff; font-family: 'MedievalSharp', cursive;
             margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden;
         }
+
         #top-ui {
             background: var(--wood); padding: 10px; display: flex; justify-content: space-around;
-            border-bottom: 4px solid #2d1b18; z-index: 10;
+            border-bottom: 4px solid #2d1b18; font-size: 1.2rem;
         }
-        #game-area { flex-grow: 1; position: relative; background: var(--grass); }
+
+        #game-container { flex-grow: 1; position: relative; background: var(--grass); }
         canvas { display: block; width: 100%; height: 100%; }
-        
-        #controls {
-            background: #3e2723; padding: 15px; display: flex; flex-direction: column; gap: 10px;
-            border-top: 5px solid #2d1b18;
+
+        #bottom-ui {
+            background: #3e2723; padding: 10px; border-top: 4px solid #2d1b18;
+            display: flex; flex-direction: column; align-items: center; gap: 8px;
         }
-        .unit-list { display: flex; justify-content: center; gap: 15px; margin-bottom: 10px; }
+
+        .unit-tray { display: flex; gap: 15px; }
         .unit-card {
-            background: #795548; border: 3px solid #5d4037; border-radius: 10px;
-            width: 70px; height: 80px; display: flex; flex-direction: column;
+            background: #795548; border: 3px solid #5d4037; border-radius: 12px;
+            width: 80px; height: 90px; display: flex; flex-direction: column;
             align-items: center; justify-content: center; cursor: pointer;
         }
         .unit-card.active { border-color: var(--gold); background: #8d6e63; transform: scale(1.1); }
-        .unit-card span { font-size: 1.5rem; }
-        .unit-card b { font-size: 0.7rem; color: var(--gold); }
+        .unit-card span { font-size: 2rem; }
+        .unit-card b { font-size: 0.8rem; color: var(--gold); }
 
-        .lane-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
-        .lane-btn {
-            background: #5d4037; color: white; border: 2px solid #2d1b18;
-            padding: 20px 0; border-radius: 8px; font-size: 1.5rem; font-family: 'MedievalSharp';
-            touch-action: manipulation; /* Çift tıklama yakınlaştırmasını engeller */
-        }
-        .lane-btn:active { background: var(--gold); color: #000; }
+        .hint { font-size: 0.8rem; color: #a1887f; }
     </style>
 </head>
 <body>
@@ -49,34 +48,28 @@
     <div style="color:#ef5350">👹 <span id="e-hp">100</span></div>
 </div>
 
-<div id="game-area">
+<div id="game-container">
     <canvas id="gameCanvas"></canvas>
 </div>
 
-<div id="controls">
-    <div class="unit-list">
-        <div class="unit-card active" id="u-sw" onclick="selectUnit('swordsman')"><span>⚔️</span><b>25G</b></div>
-        <div class="unit-card" id="u-ar" onclick="selectUnit('archer')"><span>🏹</span><b>40G</b></div>
-        <div class="unit-card" id="u-kn" onclick="selectUnit('knight')"><span>🛡️</span><b>80G</b></div>
+<div id="bottom-ui">
+    <div class="unit-tray">
+        <div class="unit-card active" id="u-sw" onclick="selected='swordsman'; updateUI()"><span>⚔️</span><b>25G</b></div>
+        <div class="unit-card" id="u-ar" onclick="selected='archer'; updateUI()"><span>🏹</span><b>40G</b></div>
+        <div class="unit-card" id="u-kn" onclick="selected='knight'; updateUI()"><span>🛡️</span><b>80G</b></div>
     </div>
-    <div class="lane-grid">
-        <button class="lane-btn" ontouchstart="spawn(0)" onclick="spawn(0)">1</button>
-        <button class="lane-btn" ontouchstart="spawn(1)" onclick="spawn(1)">2</button>
-        <button class="lane-btn" ontouchstart="spawn(2)" onclick="spawn(2)">3</button>
-        <button class="lane-btn" ontouchstart="spawn(3)" onclick="spawn(3)">4</button>
-        <button class="lane-btn" ontouchstart="spawn(4)" onclick="spawn(4)">5</button>
-    </div>
+    <div class="hint">Göndermek istediğin kulvara dokun!</div>
 </div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    let gold = 200, pHp = 100, eHp = 100, selected = 'swordsman', units = [], arrows = [];
+    let gold = 200, pHp = 100, eHp = 100, selected = 'swordsman', units = [], arrows = [], gameOver = false;
 
     const TYPES = {
-        swordsman: { hp: 100, spd: 1.5, cost: 25, icon: '⚔️', range: 20 },
-        archer:    { hp: 60,  spd: 1.2, cost: 40, icon: '🏹', range: 200 },
-        knight:    { hp: 300, spd: 0.8, cost: 80, icon: '🛡️', range: 25 }
+        swordsman: { hp: 120, spd: 1.8, cost: 25, icon: '⚔️', range: 25 },
+        archer:    { hp: 70,  spd: 1.4, cost: 40, icon: '🏹', range: 200 },
+        knight:    { hp: 400, spd: 1.0, cost: 80, icon: '🛡️', range: 30 }
     };
 
     function resize() {
@@ -86,27 +79,37 @@
     window.addEventListener('resize', resize);
     resize();
 
+    // DOKUNMATİK VE TIKLAMA KONTROLÜ
+    function handleInput(e) {
+        if(gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const y = clientY - rect.top;
+        const lane = Math.floor(y / (canvas.height / 5));
+        spawn(lane);
+    }
+
+    canvas.addEventListener('mousedown', handleInput);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); });
+
     class Unit {
         constructor(lane, type, team) {
             this.lane = lane; this.team = team; this.type = type;
             const d = TYPES[type];
             this.hp = d.hp; this.max = d.hp; this.spd = team === 'p' ? d.spd : -d.spd;
             this.icon = d.icon; this.range = d.range;
-            this.w = 40; this.h = 40;
-            this.x = team === 'p' ? -50 : canvas.width + 10;
+            this.x = team === 'p' ? -50 : canvas.width + 20;
             const lh = canvas.height / 5;
             this.y = (lane * lh) + (lh/2) - 20;
             this.lastAtk = 0; this.dead = false;
         }
         draw() {
-            ctx.font = "30px serif";
+            ctx.font = "35px serif";
             ctx.textAlign = "center";
-            // Karakter Çizimi
             ctx.fillText(this.icon, this.x + 20, this.y + 30);
-            // Can Barı
-            ctx.fillStyle = "#000"; ctx.fillRect(this.x, this.y - 10, 40, 5);
+            ctx.fillStyle = "#000"; ctx.fillRect(this.x, this.y - 12, 40, 5);
             ctx.fillStyle = this.team === 'p' ? "#2196f3" : "#f44336";
-            ctx.fillRect(this.x, this.y - 10, (this.hp/this.max)*40, 5);
+            ctx.fillRect(this.x, this.y - 12, (this.hp/this.max)*40, 5);
         }
         update() {
             let blocked = false, target = null;
@@ -121,8 +124,8 @@
             }
             if(!blocked) this.x += this.spd;
             else if(target && Date.now() - this.lastAtk > 1000) {
-                if(this.type === 'archer') arrows.push({x:this.x, y:this.y+20, t:this.team, d:false});
-                else target.hp -= 25;
+                if(this.type === 'archer') arrows.push({x:this.x+(this.team==='p'?40:-10), y:this.y+20, t:this.team, d:false});
+                else target.hp -= 20;
                 this.lastAtk = Date.now();
             }
             if(this.team === 'p' && this.x > canvas.width) { eHp -= 10; this.dead = true; }
@@ -131,52 +134,57 @@
         }
     }
 
-    function selectUnit(t) {
-        selected = t;
-        document.querySelectorAll('.unit-card').forEach(c => c.classList.remove('active'));
-        document.getElementById('u-' + t.substring(0,2)).classList.add('active');
-    }
-
     function spawn(l) {
         if(gold >= TYPES[selected].cost) {
             gold -= TYPES[selected].cost;
             units.push(new Unit(l, selected, 'p'));
-            document.getElementById('gold').innerText = gold;
+            updateUI();
         }
     }
 
-    // AI & Döngü
-    setInterval(() => { if(pHp>0 && eHp>0) gold += 5; document.getElementById('gold').innerText = gold; }, 1000);
-    setInterval(() => {
-        const t = ['swordsman','archer','knight'][Math.floor(Math.random()*3)];
-        units.push(new Unit(Math.floor(Math.random()*5), t, 'e'));
-    }, 3500);
-
-    function game() {
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        // Yollar
-        ctx.fillStyle = "rgba(0,0,0,0.1)";
-        for(let i=0; i<5; i++) ctx.fillRect(0, i*(canvas.height/5)+10, canvas.width, (canvas.height/5)-20);
-
-        arrows.forEach(a => {
-            a.x += a.t === 'p' ? 7 : -7;
-            ctx.fillStyle = "yellow"; ctx.fillRect(a.x, a.y, 10, 2);
-            units.forEach(u => {
-                if(u.team !== a.t && Math.abs(a.x - u.x) < 20 && Math.abs(a.y - u.y) < 40) { u.hp -= 20; a.d = true; }
-            });
-            if(a.x < 0 || a.x > canvas.width) a.d = true;
-        });
-        arrows = arrows.filter(a => !a.d);
-        units = units.filter(u => !u.dead);
-        units.forEach(u => { u.update(); u.draw(); });
-        
+    function updateUI() {
+        document.getElementById('gold').innerText = Math.floor(gold);
         document.getElementById('p-hp').innerText = pHp;
         document.getElementById('e-hp').innerText = eHp;
+        document.querySelectorAll('.unit-card').forEach(c => c.classList.remove('active'));
+        const idMap = {swordsman:'sw', archer:'ar', knight:'kn'};
+        document.getElementById('u-' + idMap[selected]).classList.add('active');
         
-        if(pHp > 0 && eHp > 0) requestAnimationFrame(game);
-        else alert(pHp <= 0 ? "KAYBETTİN" : "KAZANDIN");
+        if(pHp <= 0 || eHp <= 0) {
+            gameOver = true;
+            alert(pHp <= 0 ? "ORDUN DÜŞTÜ!" : "ZAFER SENİNDİR!");
+            location.reload();
+        }
     }
-    game();
+
+    setInterval(() => { if(!gameOver) { gold += 5; updateUI(); } }, 1000);
+    setInterval(() => {
+        if(gameOver) return;
+        const t = ['swordsman','archer','knight'][Math.floor(Math.random()*3)];
+        units.push(new Unit(Math.floor(Math.random()*5), t, 'e'));
+    }, 3200);
+
+    function loop() {
+        ctx.clearRect(0,0,canvas.width,canvas.height);
+        // Kulvar Çizgileri
+        ctx.strokeStyle = "rgba(255,255,255,0.1)";
+        for(let i=1; i<5; i++) {
+            ctx.beginPath(); ctx.moveTo(0, i*(canvas.height/5)); ctx.lineTo(canvas.width, i*(canvas.height/5)); ctx.stroke();
+        }
+
+        arrows.forEach(a => {
+            a.x += a.t === 'p' ? 8 : -8;
+            ctx.fillStyle = "white"; ctx.fillRect(a.x, a.y, 10, 2);
+            units.forEach(u => {
+                if(u.team !== a.t && Math.abs(a.x - u.x) < 20 && Math.abs(a.y - u.y) < 40) { u.hp -= 25; a.d = true; }
+            });
+        });
+        arrows = arrows.filter(a => !a.d && a.x > 0 && a.x < canvas.width);
+        units = units.filter(u => !u.dead);
+        units.forEach(u => { u.update(); u.draw(); });
+        if(!gameOver) requestAnimationFrame(loop);
+    }
+    loop();
 </script>
 </body>
 </html>
