@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Neon Lane Wars | GitHub Edition</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --border: #334155;
+            --player: #38bdf8;
+            --enemy: #f43f5e;
+            --gold: #fbbf24;
+        }
+
+        body {
+            background: var(--bg);
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            touch-action: manipulation;
+            overflow: hidden;
+        }
+
+        #header {
+            width: 100%;
+            max-width: 800px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            background: var(--panel);
+            border-bottom: 2px solid var(--border);
+            box-sizing: border-box;
+            font-weight: bold;
+        }
+
+        canvas {
+            background: #020617;
+            width: 100%;
+            max-width: 800px;
+            cursor: crosshair;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .controls-container {
+            width: 100%;
+            max-width: 800px;
+            padding: 10px;
+            box-sizing: border-box;
+            background: var(--panel);
+        }
+
+        .unit-selector {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .unit-btn {
+            background: #0f172a;
+            border: 1px solid var(--border);
+            color: #94a3b8;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
+
+        .unit-btn.active {
+            border-color: var(--player);
+            color: var(--player);
+            background: #0c4a6e;
+        }
+
+        .lane-btns {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .lane-btn {
+            background: var(--player);
+            color: var(--bg);
+            border: none;
+            padding: 15px 0;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            cursor: pointer;
+        }
+
+        .lane-btn:active { transform: scale(0.95); opacity: 0.8; }
+
+        .hint {
+            font-size: 0.75rem;
+            color: #64748b;
+            margin-top: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <div style="color: var(--gold)">GOLD: <span id="goldDisplay">100</span></div>
+    <div>BASE: <span id="playerHp" style="color:var(--player)">100</span></div>
+    <div>ENEMY: <span id="enemyHp" style="color:var(--enemy)">100</span></div>
+</div>
+
+<canvas id="gameCanvas" width="800" height="400"></canvas>
+
+<div class="controls-container">
+    <div class="unit-selector">
+        <button class="unit-btn active" id="btn-warrior" onclick="setUnit('warrior')">Q: Savaşçı (20G)</button>
+        <button class="unit-btn" id="btn-scout" onclick="setUnit('scout')">W: Hızlı (15G)</button>
+        <button class="unit-btn" id="btn-tank" onclick="setUnit('tank')">E: Tank (50G)</button>
+    </div>
+    
+    <div class="lane-btns">
+        <button class="lane-btn" onclick="spawnUnit(0)">1</button>
+        <button class="lane-btn" onclick="spawnUnit(1)">2</button>
+        <button class="lane-btn" onclick="spawnUnit(2)">3</button>
+        <button class="lane-btn" onclick="spawnUnit(3)">4</button>
+        <button class="lane-btn" onclick="spawnUnit(4)">5</button>
+    </div>
+    <div class="hint">PC: 1-5 tuşları kulvar seçer, Q-W-E birim değiştirir.</div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Oyun Ayarları
+    const LANES = 5;
+    const LANE_H = canvas.height / LANES;
+    let gold = 100;
+    let playerHp = 100;
+    let enemyHp = 100;
+    let selectedUnitType = 'warrior';
+    let units = [];
+    let gameOver = false;
+
+    const UNIT_DATA = {
+        warrior: { hp: 100, speed: 1.8, cost: 20, color: '#38bdf8', power: 0.6 },
+        scout:   { hp: 50,  speed: 3.5, cost: 15, color: '#4ade80', power: 0.3 },
+        tank:    { hp: 350, speed: 0.8, cost: 50, color: '#f472b6', power: 1.2 }
+    };
+
+    class Unit {
+        constructor(lane, type, team) {
+            this.lane = lane;
+            this.team = team;
+            this.type = type;
+            const data = UNIT_DATA[type];
+            this.hp = data.hp;
+            this.maxHp = data.hp;
+            this.speed = team === 'p' ? data.speed : -data.speed;
+            this.color = data.color;
+            this.power = data.power;
+            
+            this.w = 30;
+            this.h = 30;
+            this.x = team === 'p' ? -40 : canvas.width + 10;
+            this.y = (lane * LANE_H) + (LANE_H / 2) - (this.h / 2);
+            this.dead = false;
+        }
+
+        draw() {
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = this.color;
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.w, this.h);
+            ctx.shadowBlur = 0;
+
+            // Can Barı
+            ctx.fillStyle = '#000';
+            ctx.fillRect(this.x, this.y - 10, this.w, 4);
+            ctx.fillStyle = this.hp > 0 ? this.color : 'transparent';
+            ctx.fillRect(this.x, this.y - 10, (this.hp / this.maxHp) * this.w, 4);
+        }
+
+        update() {
+            let blocked = false;
+            for (let other of units) {
+                if (other !== this && other.lane === this.lane && !other.dead) {
+                    // Mesafe Hesabı: d = |x1 - x2|
+                    const dist = Math.abs(this.x - other.x);
+                    if (dist < this.w + 5) {
+                        if (this.team !== other.team) {
+                            blocked = true;
+                            other.hp -= this.power;
+                        } else if (this.team === 'p' && this.x < other.x) {
+                            blocked = true; // Kendi birimine takılma
+                        } else if (this.team === 'e' && this.x > other.x) {
+                            blocked = true;
+                        }
+                    }
+                }
+            }
+
+            if (!blocked) this.x += this.speed;
+
+            // Kale Hasarı
+            if (this.team === 'p' && this.x > canvas.width) {
+                enemyHp -= 10;
+                this.dead = true;
+            } else if (this.team === 'e' && this.x < -this.w) {
+                playerHp -= 10;
+                this.dead = true;
+            }
+
+            if (this.hp <= 0) this.dead = true;
+        }
+    }
+
+    function setUnit(type) {
+        selectedUnitType = type;
+        document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn-' + type).classList.add('active');
+    }
+
+    function spawnUnit(lane) {
+        if (gameOver) return;
+        const cost = UNIT_DATA[selectedUnitType].cost;
+        if (gold >= cost) {
+            gold -= cost;
+            units.push(new Unit(lane, selectedUnitType, 'p'));
+            updateUI();
+        }
+    }
+
+    function updateUI() {
+        document.getElementById('goldDisplay').innerText = Math.floor(gold);
+        document.getElementById('playerHp').innerText = Math.max(0, playerHp);
+        document.getElementById('enemyHp').innerText = Math.max(0, enemyHp);
+    }
+
+    // Keyboard Input
+    window.addEventListener('keydown', e => {
+        if (e.key >= 1 && e.key <= 5) spawnUnit(parseInt(e.key) - 1);
+        if (e.key === 'q') setUnit('warrior');
+        if (e.key === 'w') setUnit('scout');
+        if (e.key === 'e') setUnit('tank');
+    });
+
+    // Enemy AI
+    setInterval(() => {
+        if (gameOver) return;
+        const l = Math.floor(Math.random() * LANES);
+        const types = ['warrior', 'scout', 'tank'];
+        const t = types[Math.floor(Math.random() * types.length)];
+        units.push(new Unit(l, t, 'e'));
+    }, 2800);
+
+    // Passive Gold
+    setInterval(() => { 
+        if (!gameOver) { gold += 2; updateUI(); }
+    }, 1000);
+
+    function gameLoop() {
+        if (gameOver) return;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Kulvar Çizgileri
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2;
+        for(let i=1; i<LANES; i++) {
+            ctx.beginPath();
+            ctx.moveTo(0, i * LANE_H);
+            ctx.lineTo(canvas.width, i * LANE_H);
+            ctx.stroke();
+        }
+
+        // Birimleri Güncelle ve Çiz
+        units = units.filter(u => !u.dead);
+        units.forEach(u => {
+            u.update();
+            u.draw();
+        });
+
+        if (playerHp <= 0 || enemyHp <= 0) {
+            gameOver = true;
+            ctx.fillStyle = "rgba(0,0,0,0.7)";
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+            ctx.fillStyle = "white";
+            ctx.font = "40px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(playerHp <= 0 ? "KAYBETTİN!" : "KAZANDIN!", canvas.width/2, canvas.height/2);
+        }
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    updateUI();
+    gameLoop();
+</script>
+</body>
+</html>
